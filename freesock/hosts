@@ -1,0 +1,22 @@
+#
+# This is a sample HOSTS file used by FSI
+#
+# This file contains the mappings of IP addresses to hostnames. Each
+# entry should be kept on an individual line. The IP address should
+# be placed in the first column followed by the corresponding IP name.
+# The IP address and the host name should be separated by at least one
+# space.
+#
+# Additionally,  comments (such as these) may be inserted on individual
+# lines or following the machine name denoted by a '#' symbol.
+#
+# For example:
+#
+
+127.0.0.1       localhost
+192.234.116.1   taurus
+
+# IPX host addresses
+
+020e1a87:004f490138ab *taurus
+020e1a87:004f490138ab *localhost

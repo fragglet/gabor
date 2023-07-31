@@ -1,0 +1,90 @@
+To: <dossock@egroups.com>
+From: "Sting" <stingray@swi.hu>
+Subject: Re: [dossock] wsock2.vxd
+
+>I think Windows '9x virtual device drivers (VxDs) actually use the
+>Transport Driver Interface (TDI) rather than communicating with DLLs.
+Actually, all WS2-capable programs use the functions exported by WS2_32.DLL,
+the WinSock 2 interface unit for applications. However, WS2_32 is only a
+"transport manager" and doesn't handle any data itself, but simply
+dispatches the calls to the appriopriate "transport/service providers". The
+actual SP is used determined by the sockets type and family. The service
+provider DLL for TCP/IP is MSAFD.DLL in the original Windows package. (MSAFD
+can be replaced by an other TCP/IP provider, or there can co-exist more
+TCP/IP service providers at the same time - which, however, makes sense only
+with multiple adapters/interfaces.).
+MSAFD.DLL also does no heavy processing, but translates and passes the
+WSPxxxx() calls (receive from ws2_32.dll) to the WinSock2 VXD (wsock2.vxd).
+(WSOCK2.VXD in turn dispatches the calss to a TDI interface layer,
+implemented in AFVXD.VXD - but that's already another story.)
+
+>Gabor can comment on this more accurately than me, but IIRC Windows NT's
+>virtual device drivers (VDD) are DLLs.
+Typical NT VDDs consist of 2 parts: a special DLL, which implements the
+desired functionality (and runs in 32-bit Windows environment), and a 16-bit
+DOS TSR, which runs in the virtual DOS box and exposes the functionality of
+the VDD DLL to the applications. (DOS applications could call the VDD
+functions directly, however, this would involve using NT-specific call
+techniques, which would make the application itself unusable under plain
+DOS.)
+
+>TDI is supposedly API-compatible across Windows 3.x (?), '9x & NT.
+>I'm very interested in the VxD you mention. I maintain libsocket, a
+>networking library for DJGPP. Winsock 2 compatibility is currently a big
+>problem, since the current scheme has some large bugs in it that limit its
+>usefulness. I'd be very grateful to anyone who can help me sort this out.
+I finally got the wsock2.vxd working, but it took me several days (weeks?)
+to figure out how to make use of it.
+The functions of wsock2.vxd aren't compatible with those of wsock.vxd,
+because wsock2.vxd implements the advanced WinSock 2 functionality, and thus
+exposes appropriately modifed functions to the clients. These modifications
+affect mainly the creation of sockets (you can create a socket now by it's
+catalog id) and the sending\receiving of data (you can use multiple buffers
+in your calls). wsock2.vxd functions are much closer to the WSAxxx
+functions, than to their BSD-compilant pairs (WSASocket()<->socket(),
+WSASend()<->send(), etc.), which are the base of the wsock.vxd (the WinSock
+1.1 driver) functions.
+Additonally wsock2.vxd executes some functions asynchronously (independently
+whether you've registered the socket as an asynchronous one, or not),
+returning the mysterious $ffff error in that case.
+
+Unfortunately the wsock2.vxd also contains some really annoying bugs, which
+make almost impossible for 16-bit applications to make use of it. However,
+this doesn't effect 32-bit applications using the flat memory model (that's
+why wsock2.vxd works in Windows itself, contrary to these bugs) as all these
+bugs are related to 16:16->flat32 address mapping.
+The wsock2.vxd maps a wrong number of arguments in the calls to it's send
+and receive functions. As it translates one more dwords (pointers) at the
+start of the call structure than needed, it messes up the socket identifier
+itself (which itself isn't a pointer, but a handle) in the structure, which
+in turns results in returning WSAENOTSOCK by these functions. To solve this
+problem the wsock2.vxd needs to be patched at 2 bytes (these bytes specify
+the number of dwords to translate at these calls).
+Additionally, the wsock2.vxd doesn't map send/receive buffers correctly to
+the flat address space. As already mentioned above, wsock2.vxd exposes
+WSASend() and WSARecv() like functions to applications, which use a slightly
+different mechanism for passing buffers than the send() and recv()-like
+functions of wsock.vxd. The problem is, that although the pointers to the
+buffer arrays are translated when calling the VxD, but the actual elements
+of the buffer arrays (which consist of a buffer size and a pointer to the
+real buffering area) aren't processed in these functions (the pointer parts
+of these structures aren't translated). This problems seems to be more
+harder to solve than the previous one - but it isn't.
+The work-around for the problem is to translate these buffer addresses
+ourselves, before passing it to the VxD Actually, we let the VxD to
+translate the addresses itself, but we force it to translate specific
+addresses for us.
+We can do this by simply preparing a fake call buffer for the vxd, using a
+function that has at least one dword (pointer) translated at call-time, like
+getpeername(). Before the call we load the 16:16 address in a field which
+will be translated by the VxD, but we also make sure, that it will never use
+these buffer by simply passing an invalid socket handle (like 0) in the
+call. Of course, the wsock2.vxd returns the error code of WSAENOTSOCK for
+the call, but as it translates the addresses _before_ it checks the socket
+handle, the call structure already contains the 32bit flatmapped addresses
+on return. We simply take these translated addresses and use them in the
+real send()/recv() calls.
+
+My Pascal interface unit for the wsock2.vxd is -of course- freely available.
+
+Gabor

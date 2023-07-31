@@ -1,0 +1,15 @@
+To: <dossock@egroups.com>
+From: "Sting" <sting2@freemail.c3.hu>
+Subject: [dossock] VSL interface unit for Pascal available
+
+I've finally managed to create an interface unit for the Virtual Sockets
+Library for DOS. (As I already mentioned in one of my previous mails: it's a
+generic BSD-sockets compatible interface, which isn't a protocol stack
+itself, but provides an easy way to use different protocol stacks - like
+BWTCP, PC/TCP, Microsoft TCP/IP, Novell TCP/IP, Pathway, and even IPX/SPX
+and WinSock -  from your DOS programs.)
+
+The interface is freely available to anyone - just drop me a mail if you
+want a copy of it!
+
+Gabor

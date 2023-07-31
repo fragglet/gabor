@@ -1,0 +1,89 @@
+
+                             !!! IMPORTANT NOTICE !!!!
+
+
+The WSOCK2.VXDs included with W95 (WS2 upd.), W98 and W98SE contains several 
+BUGS, that make them unusable for 16-bit client programs. These bugs affect the
+send and receive functions exposed by the vxd.
+
+To access the functions of the vxd the client muss pass a function number (in ax)
+and a call buffer (pointed to by es:bx) to the API handler of the vxd. Call 
+structures are constructed in a way, that all data pointers (pointers to data 
+buffers, address structures, etc.) reside at the start of the call structure, in
+a single continous area. When entering the vxd (making a call to it), wsock2 
+automatically translates a varying number of parameters (the pointers) at the 
+start of this structure. (The number of actual translated parameters depends on 
+the function used.) This translation is actually mapping the 16:16 addresses to 
+32-bit flat addresses using _SelectorMapFlat(), so the vxd (which uses the 
+32-bit flat model) can use these pointers to access the neccessary data 
+structures. 
+
+However, on recv and send operations wsock2.vxd translates one more pointers at 
+the start of the call structure than neccessary, causing the "Socket handle" 
+member of the call structure to be "translated", too. As the socket handle isn't
+a pointer, but a unique integer value, this actually destroys the information
+contained herein, resulting in wsock2.vxd returning WSAENOTSOCK ("passed handle
+is not a valid socket") error code.
+
+There's also another hidden bug in wsock2.vxd.
+The recv and send functions take WSASend() and WSARecv()-like parameters. This
+means that buffer pointers aren't passed directly to the call (as to recv() or
+send() of WinSock 1.1), but instead a pointer to an array of WSABUF structures
+is passed as parameter, and the elements of this array contain the actual 
+pointers to the data buffers.
+The pointers to these arrays are translated by the vxd correctly, however, the
+actual buffer pointers of the elements aren't. This results in wsock2.vxd 
+returning WSAEINVAL error code for these calls.
+
+These bugs doesn't show up in Windows itself, because the WinSock service 
+provider for TCP/IP, MSAFD.DLL (which calls the wsock2.vxd) itself is also uses
+the same addressing as the vxd (namely flat addresses). 
+Though the pointers in the call structure are mapped also for MSAFD.DLL, but 
+they actually result in the same value as the original, thus leaving also the 
+socket handle "untouched".
+The same applies for the untranslated buffer pointers. (They don't get 
+translated, but as the translated address would be the same as the original one, 
+this has no effect for MSAFD.DLL - but for 16-bit clients.)
+
+In order to get the WSOCK2.VXD working with 16-bit clients, the table 
+controlling the number of parameters to be translated, must be patched, so the
+vxd translates the correct number of arguments.
+To locate this table search for the byte sequence 
+
+  01 01 00 01 01 01 01 00 00 04 03 03 00 03
+
+in the vxd file. Then change the parameters for the send and recv calls:
+
+  01 01 00 01 01 01 01 00 00 03 03 03 03 02
+                             ^^          ^^
+                            recv        send
+
+After changing the file you must restart Windows to make sure that it reloads
+the vxd from the disk.
+
+The buffer array pointer translation problem is solved by the interface unit by
+simply passing already translated buffer pointers to the vxd.
+
+================================== LEGAL NOTICE ===============================
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE INFORMATION CONTAINED
+BY THIS DOCUMENT IS PROVIDED TO YOU "AS IS" WITHOUT WARRANTY OF ANY KIND. 
+
+THE ENTIRE RISK AS TO THE RESULTS AND PERFORMANCE OF THE INFORMATION IS ASSUMED 
+BY YOU. 
+
+THE AUTHOR DISCLAIMS ALL WARRANTIES, EITHER EXPRESS OR IMPLIED, INCLUDING BUT 
+NOT LIMITED TO, IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A 
+PARTICULAR PURPOSE AND NONINFRINGEMENT. 
+
+IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY DIRECT, CONSEQUENTIAL, INDIRECT, INCIDENTAL, OR 
+SPECIAL DAMAGES WHATSOEVER, INCLUDING WITHOUT LIMITATION, DAMAGES FOR LOSS OF 
+BUSINESS PROFITS, BUSINESS INTERRUPTION, LOSS OF BUSINESS INFORMATION, AND THE 
+LIKE, ARISING OUT OF THE USE OF OR INABILITY TO USE THE SPECIFICATION, EVEN IF 
+THE AUTHOR HAS BEEN ADVISED OF THE POSSIBILITY OF SUCH DAMAGES. 
+
+BECAUSE SOME STATES/JURISDICTIONS DO NOT ALLOW THE EXCLUSION OR LIMITATION OF 
+LIABILITY FOR CONSEQUENTIAL OR INCIDENTAL DAMAGES, THE ABOVE LIMITATION MAY NOT 
+APPLY.
+
+================================== LEGAL NOTICE ===============================
